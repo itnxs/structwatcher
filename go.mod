@@ -1,3 +1,3 @@
-module github.com/lichenxin/structwatcher
+module github.com/itnxs/structwatcher
 
 go 1.18
