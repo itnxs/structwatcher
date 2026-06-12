@@ -15,7 +15,7 @@
 确保您的 Go 版本是 1.18 或更高：
 
 ```bash
-go get github.com/lichenxin/structwatcher
+go get github.com/itnxs/structwatcher
 ```
 
 ## 使用示例
@@ -30,7 +30,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/lichenxin/structwatcher"
+	"github.com/itnxs/structwatcher"
 )
 
 type Person struct {
