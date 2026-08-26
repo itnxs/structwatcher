@@ -25,3 +25,7 @@ Thumbs.db
 
 # Log files
 *.log
+.opencode
+
+# opencode session files
+.opencode/
