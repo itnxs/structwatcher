@@ -263,8 +263,8 @@ func main() {
   在写锁下执行 fn，fn 内可安全修改字段。
 * `SyncWatcher.View(fn func(t *T))`: 
   在读锁下执行 fn，fn 内只读访问字段。
-* `SyncWatcher.IsChanged() bool` / `Changes() []Change` / `Reset()`: 
-  语义同 `Watcher` 的对应方法；`Changes` 的 `NewValue` 为防御性深拷贝。
+* `SyncWatcher.IsChanged() bool` / `Changes() []Change` / `Reset()` / `History() T`: 
+  语义同 `Watcher` 的对应方法；`Changes` 的 `NewValue` 与 `History` 的返回值为防御性深拷贝。
 * `SyncWatcher.Unwrap() *T`: 
   取回原始 `*T`，调用方需自行保证此后无并发访问。
 * `IsChanged() bool`: 
@@ -273,6 +273,8 @@ func main() {
   返回包含所有变更字段的切片。`Change` 结构包含字段名 `Field`、旧值 `OldValue` 和新值 `NewValue`。
 * `Reset()`: 
   将当前所有字段的值保存为新的快照（引用字段深拷贝），清空当前变更记录。
+* `History() T`: 
+  返回最近一次 New 或 Reset 时的历史对象副本。引用类型字段做防御性深拷贝，修改返回值不会影响内部快照与后续变更检测；`watch:"-"` 忽略字段返回快照时刻的值，嵌入的 Watcher 被设为原实例（返回值满足 Watchable）。
 
 ## 注意事项
 
@@ -285,4 +287,5 @@ func main() {
 * **深拷贝成本**: `New`/`Reset` 会深拷贝含引用语义的字段，大 slice/map 的快照有一次复制开销；纯值类型结构体（不含 slice/map/指针/接口）的快照退化为一次浅拷贝，无额外开销。
 * **循环数据结构**: 不支持自引用的循环数据结构（指针成环时深拷贝会栈溢出）。
 * **值拷贝**: 结构体按值拷贝后（`p2 := *p`），副本仍共享原 Watcher，其变更会计入原快照。
+* **方法名遮蔽**: 若结构体自身存在名为 `History` 的字段，会遮蔽 `Watcher.History` 方法，此时需通过 `x.Watcher.History()` 显式调用。
 * **并发**: `Watcher` 非并发安全。并发场景请使用 `SyncWatcher`（写入走 `Update`、读取走 `View`），或自行加锁。

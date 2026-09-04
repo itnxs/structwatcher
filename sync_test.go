@@ -106,6 +106,42 @@ func TestSync_ChangesStableAfterFurtherMutation(t *testing.T) {
 	}
 }
 
+func TestSync_History(t *testing.T) {
+	s := NewSync(Person{Name: "tom", Age: 20})
+
+	s.Update(func(p *Person) {
+		p.Name = "jerry"
+	})
+
+	hist := s.History()
+	if hist.Name != "tom" || hist.Age != 20 {
+		t.Errorf("History got %q/%d, want tom/20", hist.Name, hist.Age)
+	}
+}
+
+func TestSync_HistoryStableAfterFurtherMutation(t *testing.T) {
+	s := NewSync(Config{Tags: []string{"a"}, M: map[string]int{"k": 1}})
+
+	s.Update(func(c *Config) {
+		c.Tags = []string{"a", "b"}
+	})
+
+	hist := s.History()
+
+	// 拿到结果后再原地修改当前值，返回的历史对象不应被影响
+	s.Update(func(c *Config) {
+		c.Tags[0] = "z"
+		c.M["k"] = 99
+	})
+
+	if !reflect.DeepEqual(hist.Tags, []string{"a"}) {
+		t.Errorf("History Tags mutated after return: %v", hist.Tags)
+	}
+	if !reflect.DeepEqual(hist.M, map[string]int{"k": 1}) {
+		t.Errorf("History M mutated after return: %v", hist.M)
+	}
+}
+
 func TestSync_NilPanics(t *testing.T) {
 	cases := map[string]func(){
 		"Update":    func() { var s *SyncWatcher[Person]; s.Update(func(*Person) {}) },
@@ -113,6 +149,7 @@ func TestSync_NilPanics(t *testing.T) {
 		"IsChanged": func() { var s *SyncWatcher[Person]; s.IsChanged() },
 		"Changes":   func() { var s *SyncWatcher[Person]; s.Changes() },
 		"Reset":     func() { var s *SyncWatcher[Person]; s.Reset() },
+		"History":   func() { var s *SyncWatcher[Person]; s.History() },
 		"Unwrap":    func() { var s *SyncWatcher[Person]; s.Unwrap() },
 	}
 	for name, fn := range cases {

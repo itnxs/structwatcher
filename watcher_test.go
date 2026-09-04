@@ -615,6 +615,92 @@ func TestChanges_ChanNilToNil(t *testing.T) {
 	}
 }
 
+func TestHistory_Basic(t *testing.T) {
+	p := New(Person{Name: "tom", Age: 20})
+
+	p.Name = "jerry"
+	p.Age = 25
+
+	hist := p.History()
+	if hist.Name != "tom" || hist.Age != 20 {
+		t.Errorf("History got %q/%d, want tom/20", hist.Name, hist.Age)
+	}
+	if p.Name != "jerry" || p.Age != 25 {
+		t.Errorf("History should not modify current value, got %q/%d", p.Name, p.Age)
+	}
+}
+
+func TestHistory_AfterReset(t *testing.T) {
+	p := New(Person{Name: "tom", Age: 20})
+
+	p.Name = "jerry"
+	p.Reset()
+
+	hist := p.History()
+	if hist.Name != "jerry" {
+		t.Errorf("History after Reset got %q, want jerry", hist.Name)
+	}
+}
+
+func TestHistory_RefFieldsDefensiveCopy(t *testing.T) {
+	c := New(Config{Title: "t", Tags: []string{"a"}, M: map[string]int{"k": 1}})
+
+	hist := c.History()
+	hist.Tags[0] = "z"
+	hist.M["k"] = 99
+
+	if c.IsChanged() {
+		t.Error("mutating History result should not mark struct changed")
+	}
+
+	c.Tags[0] = "b"
+	changes := c.Changes()
+	if len(changes) != 1 || changes[0].Field != "Tags" {
+		t.Fatalf("expected only Tags change, got %v", changes)
+	}
+	if !reflect.DeepEqual(changes[0].OldValue, []string{"a"}) {
+		t.Errorf("Tags OldValue affected by History mutation: %v", changes[0].OldValue)
+	}
+}
+
+func TestHistory_IgnoredFieldsUseSnapshotValues(t *testing.T) {
+	d := New(Document{Title: "v1", Body: "hello", History: []string{"a"}, Reviewers: []string{"r1"}})
+
+	d.Title = "v2"
+
+	// 注意：Document 自身的 History 字段会遮蔽方法名，需通过嵌入字段显式调用
+	hist := d.Watcher.History()
+	if hist.Title != "v1" {
+		t.Errorf("ignored Title should keep snapshot value, got %q", hist.Title)
+	}
+
+	// 修改返回值中的忽略字段不应影响当前值
+	hist.History[0] = "x"
+	if d.History[0] != "a" {
+		t.Errorf("mutating ignored field of History result affected target: %v", d.History)
+	}
+}
+
+func TestHistory_EmbeddedWatcherPreserved(t *testing.T) {
+	p := New(Person{Name: "tom", Age: 20})
+
+	hist := p.History()
+	if hist.Watcher != p.Watcher {
+		t.Error("History result should keep the original embedded Watcher")
+	}
+}
+
+func TestHistory_NilWatcher(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on nil watcher")
+		}
+	}()
+
+	var w *Watcher[Person]
+	w.History()
+}
+
 func BenchmarkNew(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = New(Person{Name: "tom", Age: 20})

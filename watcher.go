@@ -180,6 +180,41 @@ func (w *Watcher[T]) Reset() {
     w.takeSnapshot()
 }
 
+// History 返回最近一次 New 或 Reset 时的历史对象副本。
+// 引用类型字段会做防御性深拷贝，修改返回值不会影响内部快照与后续变更检测；
+// watch:"-" 忽略字段返回快照时刻的值，嵌入的 Watcher 会被设为原实例
+// （返回值因此满足 Watchable 接口，但调用其方法操作的是原实例）。
+// 如果接收器为 nil（未通过 New 创建），则 panic。
+func (w *Watcher[T]) History() T {
+    if w == nil {
+        panic("structwatcher: method History called on nil Watcher, use structwatcher.New to create")
+    }
+    snap := reflect.ValueOf(&w.snapshot).Elem()
+    cp := reflect.New(snap.Type()).Elem()
+    cp.Set(snap)
+    for i := 0; i < snap.NumField(); i++ {
+        if w.meta.isEmbedded(i) {
+            continue
+        }
+        f := cp.Field(i)
+        if f.CanSet() && cachedContainsRef(f.Type()) {
+            f.Set(deepCopyValue(snap.Field(i)))
+        }
+    }
+    w.injectEmbedded(cp)
+    return cp.Interface().(T)
+}
+
+// isEmbedded 判断字段索引 i 是否为嵌入的 *Watcher[T] 字段。
+func (m *watcherMeta) isEmbedded(i int) bool {
+    for _, e := range m.embedded {
+        if e == i {
+            return true
+        }
+    }
+    return false
+}
+
 // metaFor 返回 T 的字段元数据，首次调用时构建并缓存。
 // 若 T 不是结构体或未嵌入 *Watcher[T]，则 panic。
 func metaFor[T Watchable]() *watcherMeta {
@@ -276,7 +311,11 @@ func (w *Watcher[T]) takeSnapshot() {
 // setEmbedded 将 Watcher 实例设置到所有嵌入字段上。
 // 这样目标结构体可以通过嵌入字段访问 Watcher 的公开方法。
 func (w *Watcher[T]) setEmbedded() {
-    v := reflect.ValueOf(w.target).Elem()
+    w.injectEmbedded(reflect.ValueOf(w.target).Elem())
+}
+
+// injectEmbedded 将 Watcher 实例设置到 v 的所有嵌入字段上，v 须为 T 的可寻址视图。
+func (w *Watcher[T]) injectEmbedded(v reflect.Value) {
     for _, i := range w.meta.embedded {
         if f := v.Field(i); f.CanSet() {
             f.Set(reflect.ValueOf(w))

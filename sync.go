@@ -96,6 +96,18 @@ func (s *SyncWatcher[T]) Reset() {
 	s.w.Reset()
 }
 
+// History 返回最近一次 New 或 Reset 时的历史对象副本，语义同 Watcher.History。
+// 返回值为防御性深拷贝，锁释放后读取不受后续并发修改影响。
+// 如果接收器为 nil，则 panic。
+func (s *SyncWatcher[T]) History() T {
+	if s == nil {
+		panic("structwatcher: method History called on nil SyncWatcher, use structwatcher.NewSync to create")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.w.History()
+}
+
 // Unwrap 返回被包装的原始 *T，供确定无并发访问时直接操作。
 // 调用方需自行保证此后不再有并发的 Update/View/IsChanged/Changes/Reset，
 // 否则会绕过锁产生数据竞争。
